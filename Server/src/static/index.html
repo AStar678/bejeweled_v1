@@ -1,0 +1,1755 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>宝石迷阵 - 极速手感版</title>
+    <style>
+        /* =========================================
+           1. 全局配置（页面）
+           ========================================= */
+        :root {
+            --bg-gradient: linear-gradient(120deg, #a1c4fd 0%, #c2e9fb 100%); /* 背景渐变 */
+            --glass-bg: rgba(255, 255, 255, 0.9); /* 毛玻璃效果背景 */
+            --text-main: #2c3e50; /* 主要文字颜色 */
+            --text-sub: #7f8c8d; /* 次要文字颜色 */
+            --accent: #ff7675; /* 强调色 */
+            --blue: #0984e3; /* 蓝色 */
+            --locked: #bdc3c7; /* 锁定状态颜色设置 */
+        }
+
+        * {
+            -webkit-tap-highlight-color: transparent;
+            box-sizing: border-box; /* css变量,统一管理和修改主题 */
+        }
+
+        body {
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif; /* 中文优先 */
+            margin: 0;
+            min-height: 100vh; /* 满屏高度 */
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* 布局，居中 */
+            user-select: none;
+            color: var(--text-main); /* 禁止文本选择 */
+            background: var(--bg-gradient);
+            background-attachment: fixed; /* 固定背景渐变 */
+            overflow-x: hidden;
+            padding-bottom: 20px; /* 隐藏水平滚动 */
+        }
+
+        .view {
+            display: none;
+            width: 100%;
+            min-height: 100vh; /* 默认隐藏所有视图 */
+            flex-direction: column;
+            align-items: center;
+            padding-top: 20px;
+            position: relative;
+        }
+        .view.active {
+            display: flex; /* 激活的视图显示 */
+        }
+
+        .panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px); /* 毛玻璃效果 */
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); /* 圆角,阴影设置 */
+            text-align: center;
+            width: 92%;
+            max-width: 600px;
+            margin-bottom: 20px;
+        }
+
+        /* 按钮与控件样式/显示等设置 */
+        button {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.1s;
+        }
+        button:active {
+            transform: scale(0.96);
+        }
+        button.secondary {
+            background: #fff;
+            color: var(--text-main);
+            border: 1px solid #dfe6e9;
+            box-shadow: none;
+        }
+        input {
+            width: 100%;
+            padding: 14px;
+            margin: 10px 0;
+            border: 2px solid #eee;
+            border-radius: 12px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        .lobby-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .lobby-card {
+            background: #fff;
+            padding: 20px 15px;
+            border-radius: 16px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 140px;
+        }
+        .lobby-card h4 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+        }
+        .lobby-card p {
+            font-size: 12px;
+            color: #999;
+            margin: 0 0 15px 0;
+        }
+
+        /* =========================================
+           2. 关卡地图样式设置
+           ========================================= */
+        .map-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 25px;
+            padding: 20px 0;
+        }
+        .level-node {
+            width: 70px;
+            height: 70px;
+            background: #fff;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            position: relative;
+            transition: 0.2s;
+            border: 3px solid transparent;
+            cursor: pointer;
+        }
+        .level-num {
+            font-size: 20px;
+            font-weight: 900;
+            color: var(--blue);
+        }
+        .level-desc {
+            font-size: 10px;
+            position: absolute;
+            bottom: -22px;
+            width: 100px;
+            text-align: center;
+            color: #666;
+        }
+
+        .level-node.current {
+            border-color: var(--accent);
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(255, 118, 117, 0.4);
+        }
+        .level-node.locked {
+            background: #e0e0e0;
+            box-shadow: none;
+            cursor: not-allowed;
+            border-color: transparent;
+        }
+        .level-node.locked .level-num {
+            display: none;
+        }
+        .level-node.locked::after {
+            content: "🔒";
+            font-size: 24px;
+            color: #999;
+        }
+
+        /* =========================================
+           3. 游戏核心（棋盘设置）
+           ========================================= */
+        .arena {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 100%;
+        }
+        .board-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .board-wrapper {
+            width: 94vw;
+            max-width: 480px;
+            height: 94vw;
+            max-height: 480px;
+            position: relative;
+            margin: 0 auto;
+        }
+        .board {
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.5);
+            border: 4px solid #fff;
+            border-radius: 16px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 宝石比例/样式设置 */
+        .gem {
+            width: 12.5%;
+            height: 12.5%;
+            position: absolute;
+            background-size: 85%;
+            background-repeat: no-repeat;
+            background-position: center;
+            z-index: 10;
+            transition: top 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                        left 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                        transform 0.2s;
+        }
+        .gem.selected::after {
+            content: '';
+            position: absolute;
+            top: 5%;
+            left: 5%;
+            width: 90%;
+            height: 90%;
+            border: 3px solid #fff;
+            border-radius: 20%;
+            box-shadow: 0 0 10px var(--accent);
+            animation: pulse 1s infinite; /* 选中动画 */
+        }
+        /* 选中效果 */
+        @keyframes pulse {
+            50% {
+                opacity: 0.5;
+                transform: scale(0.95);
+            }
+        }
+        .gem.eliminating {
+            animation: pop-out 0.3s ease-out forwards;
+        }
+        @keyframes pop-out {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(0);
+                opacity: 0;
+            }
+        }
+
+        .gem-1 { background-image: url('1.png'); }
+        .gem-2 { background-image: url('2.png'); }
+        .gem-3 { background-image: url('3.png'); }
+        .gem-4 { background-image: url('4.png'); }
+        .gem-5 { background-image: url('5.png'); }
+        .gem-6 { background-image: url('6.png'); }
+        .gem-7 { background-image: url('7.png'); }
+        .gem-9 {
+            background: #555;
+            border-radius: 50%;
+        }
+        .gem-9::after {
+            content: "🦠";
+            font-size: 20px;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* 特效层 */
+        /* 冰块 */
+        .ice-layer {
+            position: absolute;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+            background: rgba(255,255,255,0.4);
+            border: 2px solid white;
+            border-radius: 12px;
+            pointer-events: none;
+            z-index: 15;
+        }
+        /* 炸弹 */
+        .bomb-layer {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 20px;
+            height: 20px;
+            background: #ff7675;
+            border-radius: 50%;
+            color: white;
+            font-size: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid white;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 20;
+        }
+        /* 冰冻区域 */
+        .freeze-overlay {
+            position: absolute;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+            background: rgba(9, 132, 227, 0.4);
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 40px;
+            color: white;
+            backdrop-filter: blur(3px);
+            border-radius: 16px;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* 暴击震动与文字 */
+        /* 震动 */
+        .shake-effect {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+        @keyframes shake {
+            10%, 90% {
+                transform: translate3d(-2px, 0, 0);
+            }
+            20%, 80% {
+                transform: translate3d(4px, 0, 0);
+            }
+            30%, 50%, 70% {
+                transform: translate3d(-6px, 0, 0);
+            }
+            40%, 60% {
+                transform: translate3d(6px, 0, 0);
+            }
+        }
+        /* 文字弹出 */
+        .crit-popup {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            font-size: 40px;
+            color: #ffeb3b;
+            font-weight: 900;
+            text-shadow: 0 0 10px red;
+            z-index: 100;
+            pointer-events: none;
+            opacity: 0;
+            transition: transform 0.2s;
+        }
+        .crit-popup.active {
+            animation: critAnim 1s forwards;
+        }
+        @keyframes critAnim {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0);
+            }
+            20% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1.5) rotate(-10deg);
+            }
+            80% {
+                opacity: 1;
+                transform: translate(-50%, -100%) scale(1.2) rotate(0deg);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -150%) scale(1);
+            }
+        }
+
+        .hud {
+            display: flex;
+            justify-content: space-around;
+            width: 94vw;
+            max-width: 480px;
+            background: #fff;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        .hud-item {
+            text-align: center;
+        }
+        .hud-item div:last-child {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .shop-bar {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            max-width: 480px;
+            transition: all 0.3s;
+        }
+        .shop-bar.disabled {
+            opacity: 0.5;
+            filter: grayscale(1);
+            pointer-events: none;
+            position: relative;
+        }
+        .shop-bar.disabled::after {
+            content: "仅PVP可用";
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            color: white;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        #opp-container {
+            position: fixed;
+            top: 60px;
+            right: 10px;
+            background: rgba(255,255,255,0.95);
+            padding: 5px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            z-index: 200;
+            transform: scale(0.8);
+            transform-origin: top right;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .mini-board-view {
+            width: 120px;
+            height: 120px;
+            position: relative;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: 0.3s;
+        }
+        .modal.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-content {
+            background: #fff;
+            width: 300px;
+            padding: 25px;
+            border-radius: 20px;
+            text-align: center;
+            transform: scale(0.8);
+            transition: 0.3s;
+        }
+        .modal.visible .modal-content {
+            transform: scale(1);
+        }
+
+        @media (max-width: 600px) {
+            .lobby-grid {
+                grid-template-columns: 1fr;
+            }
+            .lobby-card {
+                flex-direction: row;
+                align-items: center;
+                min-height: 80px;
+                padding: 15px;
+            }
+            .lobby-card p {
+                display: none;
+            }
+            .lobby-card button {
+                width: auto;
+                padding: 8px 15px;
+                margin: 0;
+                font-size: 14px;
+                min-width: 90px;
+            }
+            .shop-bar {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                background: rgba(255,255,255,0.95);
+                border-top: 1px solid #eee;
+                padding: 10px 0;
+                z-index: 500;
+                border-radius: 20px 20px 0 0;
+            }
+            #view-game {
+                padding-bottom: 100px;
+            }
+            #opp-container {
+                top: 70px;
+                right: 5px;
+                transform: scale(0.7);
+            }
+        }
+
+        .css-logo {
+            font-size: 40px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 10px;
+            display: inline-block;
+            position: relative;
+        }
+        .css-logo::before {
+            content: "💎";
+            font-size: 30px;
+            position: absolute;
+            left: -35px;
+            top: 0;
+            animation: floatGem 3s ease infinite;
+        }
+        @keyframes floatGem {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+        #logs {
+            position: fixed;
+            top: 60px;
+            left: 10px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            text-shadow: 0 1px 2px white;
+        }
+    </style>
+</head>
+<body>
+
+<div id="view-auth" class="view active" style="justify-content: center;">
+    <div class="panel">
+        <div class="css-logo" style="margin-left: 20px;">宝石迷阵</div>
+        <div style="color:var(--text-sub); letter-spacing:2px; margin-bottom:30px; font-size:14px;">
+            —— 掌上消除奇幻之旅 ——
+        </div>
+        <input type="text" id="auth-account" placeholder="请输入账号">
+        <input type="password" id="auth-password" placeholder="请输入密码">
+        <input type="text" id="auth-nickname" placeholder="昵称 (仅注册)" class="hidden">
+        <button id="btn-auth-action" onclick="doAuth()"
+                style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin-top:20px;">
+            🚀 进入游戏
+        </button>
+        <button class="secondary" onclick="toggleAuthMode()" id="btn-toggle-auth">
+            注册新账号
+        </button>
+    </div>
+</div>
+
+<div id="view-lobby" class="view">
+    <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #eee;">
+            <div style="text-align:left;">
+                <div style="font-size:18px; font-weight:bold;">
+                    <span id="user-nickname" style="color:var(--blue)">Player</span>
+                </div>
+            </div>
+            <div style="background:#fff7e6; padding:5px 12px; border-radius:20px; border:1px solid #ffe8cc; color:#fa8c16; font-weight:bold;">
+                💰 <span id="user-coins">0</span>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-bottom:20px;">
+            <button class="secondary" onclick="showView('mall')" style="font-size:14px; padding: 10px 5px;">
+                🛍️ 商城
+            </button>
+            <button class="secondary" onclick="showRank()" style="font-size:14px; padding: 10px 5px;">
+                🏆 排行
+            </button>
+            <button class="secondary" onclick="toggleSound()" id="btn-sound" style="font-size:14px; padding: 10px 5px;">
+                🔇 静音
+            </button>
+        </div>
+
+        <div class="lobby-grid">
+            <div class="lobby-card">
+                <div>
+                    <h4>🏰 闯关模式</h4>
+                    <p>探索奇幻大陆</p>
+                </div>
+                <button onclick="openLevelMap()"
+                        style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                    选择
+                </button>
+            </div>
+            <div class="lobby-card">
+                <div>
+                    <h4>♾️ 无尽模式</h4>
+                    <p>挑战消除极限</p>
+                </div>
+                <button onclick="startEndless()"
+                        style="background:linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);">
+                    挑战
+                </button>
+            </div>
+            <div class="lobby-card">
+                <div>
+                    <h4>⚔️ 玩家对战</h4>
+                    <p>实时PVP竞技</p>
+                </div>
+                <button onclick="startPVP()" id="btn-pvp"
+                        style="background:linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);">
+                    匹配
+                </button>
+            </div>
+            <div class="lobby-card">
+                <div>
+                    <h4>🤖 挑战 AI</h4>
+                    <p>人机对战演练</p>
+                </div>
+                <button onclick="openAiModal()"
+                        style="background:linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%); color:#2c3e50;">
+                    对战
+                </button>
+            </div>
+        </div>
+        <div style="margin-top:20px; color:#999; font-size:12px;" onclick="logout()">
+            退出登录
+        </div>
+    </div>
+</div>
+
+<div id="view-level-map" class="view">
+    <div class="panel">
+        <h3 style="color:var(--blue); margin-top:0;">🗺️ 选择关卡</h3>
+        <div class="map-container" id="level-map-container"></div>
+        <button class="secondary" onclick="showView('lobby')">
+            返回大厅
+        </button>
+    </div>
+</div>
+
+<div id="modal-ai" class="modal">
+    <div class="modal-content">
+        <h3>🤖 选择难度</h3>
+        <button class="secondary" onclick="startAiGame(1)">🌱 简单</button>
+        <button class="secondary" onclick="startAiGame(2)">⚔️ 普通</button>
+        <button class="secondary" onclick="startAiGame(3)">🔥 困难</button>
+        <button onclick="closeAiModal()" style="margin-top:15px; background:#eee; color:#666;">
+            取消
+        </button>
+    </div>
+</div>
+
+<div id="view-game" class="view">
+    <div style="width:94%; display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; position: relative; z-index: 1000;">
+        <button class="secondary" style="width:auto; padding:8px 15px; font-size:14px;" onclick="backToLobby()">
+            🔙
+        </button>
+        <div id="game-info" style="font-weight:800; font-size:18px;">游戏</div>
+        <div style="width:40px;"></div>
+    </div>
+
+    <div class="arena">
+        <div class="board-container">
+            <div class="hud">
+                <div class="hud-item">
+                    <div>金币</div>
+                    <div id="game-coins" style="color:#f1c40f">0</div>
+                </div>
+                <div class="hud-item">
+                    <div>分数</div>
+                    <div id="my-score">0</div>
+                </div>
+                <div class="hud-item">
+                    <div>目标</div>
+                    <div id="center-val">--</div>
+                </div>
+            </div>
+            <div class="board-wrapper">
+                <div id="my-board" class="board"></div>
+                <div id="crit-msg" class="crit-popup">CRITICAL!</div>
+            </div>
+        </div>
+        <div id="shop-container" class="shop-bar"
+             style="display:flex; justify-content:space-around; width:100%; max-width:480px;">
+            <div onclick="useItemGame('bomb')" style="text-align:center; flex:1;">
+                <div style="font-size:24px;">💣</div>
+                <div style="font-size:10px; color:#666;">炸弹 x<span id="count-bomb">0</span></div>
+            </div>
+            <div onclick="useItemGame('reset')" style="text-align:center; flex:1;">
+                <div style="font-size:24px;">🔄</div>
+                <div style="font-size:10px; color:#666;">重置 x<span id="count-reset">0</span></div>
+            </div>
+            <div onclick="useItemGame('freeze')" style="text-align:center; flex:1;">
+                <div style="font-size:24px;">❄️</div>
+                <div style="font-size:10px; color:#666;">冰冻 x<span id="count-freeze">0</span></div>
+            </div>
+        </div>
+        <div id="opp-container" class="hidden">
+            <div style="font-size:10px; color:var(--accent); font-weight:bold; margin-bottom:2px;">
+                对手: <span id="opp-score">0</span>
+            </div>
+            <div class="mini-board-view">
+                <div id="opp-board" class="board" style="border-width:2px; width:100%; height:100%;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="view-rank" class="view">
+    <div class="panel">
+        <h3>🏆 荣耀榜单</h3>
+        <div id="rank-tbody" style="text-align:left; max-height:60vh; overflow-y:auto;"></div>
+        <button class="secondary" onclick="showView('lobby')" style="margin-top:20px;">
+            返回
+        </button>
+    </div>
+</div>
+
+<div id="view-mall" class="view">
+    <div class="panel">
+        <h3>🛍️ 商城</h3>
+        <div style="display:flex; justify-content:space-around; margin-bottom:20px;">
+            <div onclick="buyItemShop('bomb')">
+                💣<br>30💰
+            </div>
+            <div onclick="buyItemShop('reset')">
+                🔄<br>30💰
+            </div>
+            <div onclick="buyItemShop('freeze')">
+                ❄️<br>30💰
+            </div>
+        </div>
+        <button class="secondary" onclick="showView('lobby')">
+            返回
+        </button>
+    </div>
+</div>
+
+<div id="logs"></div>
+
+<script>
+    const API = "/api";
+    let TOKEN = localStorage.getItem("token") || "";
+    let UID = parseInt(localStorage.getItem("uid") || "0");
+    let UUID = "",
+        POLL_TIMER = null,
+        selectedGem = null,
+        isProcessing = false;
+    let isRegister = false,
+        MODE = "";
+    let ASSETS = {
+        coins: 0,
+        items: {
+            bomb: 0,
+            reset: 0,
+            freeze: 0
+        }
+    };
+    let MAX_LEVEL = 1;
+    let CURRENT_LEVEL = 1;
+    let activeItem = null;
+
+    let gemDOMs = Array(8).fill(null).map(() => Array(8).fill(null));
+    let oppGemDOMs = Array(8).fill(null).map(() => Array(8).fill(null));
+
+    const LEVEL_CONFIG = [
+        { id: 1, name: "初入森林" },
+        { id: 2, name: "冰封雪原" },
+        { id: 3, name: "烈焰峡谷" },
+        { id: 4, name: "病毒危机" },
+        { id: 5, name: "步步惊心" }
+    ];
+
+    // ==========================================
+    // 🎵 音频管理器
+    // ==========================================
+    const SoundManager = {
+        ctx: null,
+        isMuted: true,
+        bgmAudio: null,
+
+        init: function() {
+            if (!this.ctx) {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.bgmAudio = new Audio("/bgm.mp3");
+                this.bgmAudio.loop = true;
+                this.bgmAudio.volume = 0.3;
+            }
+            if (this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+        },
+
+        // 开关静音
+        toggleMute: function() {
+            this.isMuted = !this.isMuted;
+            if(this.bgmAudio) {
+                if(this.isMuted) {
+                    this.bgmAudio.pause();
+                } else {
+                    this.bgmAudio.play().catch(e => console.log("BGM play failed:", e));
+                }
+            }
+            return this.isMuted;
+        },
+
+        // 播放BGM
+        playBGM: function() {
+            if (!this.isMuted && this.bgmAudio) {
+                this.bgmAudio.play().catch(e => {
+                    console.log("Waiting for user interaction to play BGM...");
+                });
+            }
+        },
+
+        // 生成振荡器声音(交换、普通消除特效音)
+        playTone: function(freq, type, duration, vol = 0.1) {
+            if (this.isMuted || !this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = type; // 'sine', 'square', 'sawtooth', 'triangle'
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        },
+
+        // 🔊 移动/交换 (短促的低音)
+        playSwap: function() {
+            this.playTone(300, 'sine', 0.1, 0.1);
+        },
+
+        // 🎵 消除 (清脆的高音和弦)
+        playEliminate: function(combo = 1) {
+            if (this.isMuted || !this.ctx) return;
+            // 根据连击数提高音调
+            const baseFreq = 440 + (combo * 50);
+
+            this.playTone(baseFreq, 'sine', 0.3, 0.1);
+            setTimeout(() => this.playTone(baseFreq * 1.25, 'sine', 0.3, 0.1), 50); // E
+            setTimeout(() => this.playTone(baseFreq * 1.5, 'sine', 0.3, 0.1), 100); // G
+        },
+
+        // 💥 炸弹/暴击
+        playExplosion: function() {
+            if (this.isMuted || !this.ctx) return;
+            const bufferSize = this.ctx.sampleRate * 0.5; // 0.5秒
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 1000;
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+            noise.start();
+        }
+    };
+
+    const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    function showView(id) {
+        document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
+        document.getElementById('view-' + id).classList.add('active');
+        if(id === 'lobby' || id === 'mall') updateUIAssets();
+        if(id === 'level-map') renderLevelMap();
+    }
+
+    function toggleAuthMode() {
+        isRegister = !isRegister;
+        document.getElementById('btn-toggle-auth').innerText = isRegister ? "返回登录" : "注册新账号";
+        document.getElementById('auth-nickname').classList.toggle('hidden', !isRegister);
+        document.getElementById('btn-auth-action').innerText = isRegister ? "✨ 注册账号" : "🚀 进入游戏";
+    }
+
+    async function doAuth() {
+        const a = document.getElementById('auth-account').value,
+              p = document.getElementById('auth-password').value,
+              n = document.getElementById('auth-nickname').value;
+        const endpoint = isRegister ? "/auth/register" : "/auth/login";
+        const r = await api(endpoint, {account: a, password: p, nickname: n});
+        if(r && r.code === 200) {
+            if(isRegister) {
+                alert("注册成功，请登录");
+                toggleAuthMode();
+            } else {
+                TOKEN = r.data.token;
+                UID = r.data.uid;
+                localStorage.setItem("token", TOKEN);
+                localStorage.setItem("uid", UID);
+                localStorage.setItem("nick", r.data.nickname);
+                ASSETS = r.data.assets;
+                MAX_LEVEL = r.data.assets.max_level || 1;
+                saveAssets();
+                showView('lobby');
+            }
+        } else {
+            alert(r ? r.msg : "操作失败");
+        }
+    }
+
+    window.onload = async () => {
+        if(TOKEN && UID) {
+            const r = await api("/user/sync", {uid: UID});
+            if(r && r.code === 200) {
+                ASSETS = r.data.assets;
+                MAX_LEVEL = r.data.assets.max_level || 1;
+                localStorage.setItem("nick", r.data.nickname);
+                saveAssets();
+            } else {
+                ASSETS.coins = parseInt(localStorage.getItem("coins") || 0);
+                ASSETS.items = JSON.parse(localStorage.getItem("items") || '{"bomb":0,"reset":0,"freeze":0}');
+                MAX_LEVEL = parseInt(localStorage.getItem("max_level") || 1);
+            }
+            showView('lobby');
+        }
+    }
+
+    function saveAssets() {
+        localStorage.setItem("coins", ASSETS.coins);
+        localStorage.setItem("items", JSON.stringify(ASSETS.items));
+        localStorage.setItem("max_level", MAX_LEVEL);
+        updateUIAssets();
+    }
+
+    async function backToLobby() {
+        if (POLL_TIMER) clearInterval(POLL_TIMER);
+        POLL_TIMER = null;
+        isProcessing = false;
+        selectedGem = null;
+        activeItem = null;
+
+        // 清理前端视觉残留
+        clearHighlight();
+        document.querySelectorAll('.freeze-overlay').forEach(e => e.remove());
+        document.querySelectorAll('.ice-layer').forEach(e => e.remove());
+        document.querySelectorAll('.board').forEach(e => e.classList.remove('shake-effect'));
+
+        // 通知后端销毁Session
+        if (UUID) {
+            api("/game/quit", { game_uuid: UUID });
+            UUID = "";
+        }
+
+        const pvpBtn = document.getElementById('btn-pvp');
+        if(pvpBtn) {
+            pvpBtn.disabled = false;
+            pvpBtn.innerText = "匹配";
+            pvpBtn.onclick = startPVP;
+        }
+
+        showView('lobby');
+    }
+
+    async function showRank() {
+        const res = await api("/rank");
+        if(res && res.code === 200) {
+            const list = res.data;
+            const tbody = document.getElementById('rank-tbody');
+            tbody.innerHTML = "";
+            if(list.length === 0) {
+                tbody.innerHTML = "<div style='text-align:center;color:#999'>暂无数据</div>";
+            } else {
+                list.forEach((item, index) => {
+                    let icon = index + 1;
+                    if(index === 0) icon = "🥇";
+                    else if(index === 1) icon = "🥈";
+                    else if(index === 2) icon = "🥉";
+                    const row = document.createElement('div');
+                    row.style.cssText = "display:flex; justify-content:space-between; padding:12px; border-bottom:1px solid #eee; align-items:center;";
+                    row.innerHTML = `
+                        <div style="font-weight:bold; width:30px;">${icon}</div>
+                        <div style="flex:1;">${item.nickname}</div>
+                        <div style="font-weight:bold;color:var(--blue)">${item.score}</div>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+            showView('rank');
+        } else {
+            alert("获取排行榜失败");
+        }
+    }
+
+    function renderLevelMap() {
+        const container = document.getElementById('level-map-container');
+        container.innerHTML = "";
+        LEVEL_CONFIG.forEach(lvl => {
+            const isLocked = lvl.id > MAX_LEVEL;
+            const isCurrent = lvl.id === MAX_LEVEL;
+            const div = document.createElement('div');
+            div.className = `level-node ${isLocked ? 'locked' : ''} ${isCurrent ? 'current' : ''}`;
+            div.onclick = () => {
+                if(isLocked) {
+                    alert("🔒 先通关上一关！");
+                } else {
+                    startLevel(lvl.id);
+                }
+            };
+            div.innerHTML = `
+                <div class="level-num">${lvl.id}</div>
+                <div class="level-desc">${lvl.name}</div>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function initBoardDOM(id, targetDomArray, map) {
+        const container = document.getElementById(id);
+        container.innerHTML = "";
+        for(let r = 0; r < 8; r++) {
+            for(let c = 0; c < 8; c++) {
+                targetDomArray[r][c] = null;
+            }
+        }
+        for(let r = 0; r < 8; r++) {
+            for(let c = 0; c < 8; c++) {
+                if(map[r][c] !== 0) {
+                    const el = createGemElement(map[r][c], r, c, id);
+                    container.appendChild(el);
+                    targetDomArray[r][c] = el;
+                }
+            }
+        }
+    }
+
+    function createGemElement(type, r, c, boardId) {
+        const el = document.createElement('div');
+        el.className = `gem gem-${type}`;
+        el.style.left = (c * 12.5) + "%";
+        el.style.top = (r * 12.5) + "%";
+        el.dataset.r = r;
+        el.dataset.c = c;
+        if(boardId === 'my-board') {
+            el.onclick = function() {
+                onGemClick(parseInt(this.dataset.r), parseInt(this.dataset.c));
+            };
+        }
+        return el;
+    }
+
+    async function swapGemDOMs(r1, c1, r2, c2) {
+        SoundManager.playSwap();
+        const el1 = gemDOMs[r1][c1];
+        const el2 = gemDOMs[r2][c2];
+        if(el1) {
+            el1.style.top = (r2 * 12.5) + "%";
+            el1.style.left = (c2 * 12.5) + "%";
+            el1.dataset.r = r2;
+            el1.dataset.c = c2;
+        }
+        if(el2) {
+            el2.style.top = (r1 * 12.5) + "%";
+            el2.style.left = (c1 * 12.5) + "%";
+            el2.dataset.r = r1;
+            el2.dataset.c = c1;
+        }
+        gemDOMs[r1][c1] = el2;
+        gemDOMs[r2][c2] = el1;
+        await wait(300);
+    }
+
+    async function animateRefill(boardId, domArray, newMap) {
+        const container = document.getElementById(boardId);
+        let newGemDOMs = Array(8).fill(null).map(() => Array(8).fill(null));
+
+        for (let c = 0; c < 8; c++) {
+            let survivors = [];
+            for(let r = 7; r >= 0; r--) {
+                const el = domArray[r][c];
+                if(el) {
+                    if(el.classList.contains('eliminating')) {
+                        el.remove();
+                    } else {
+                        survivors.push(el);
+                    }
+                }
+            }
+
+            let survivorIdx = 0;
+            for(let r = 7; r >= 0; r--) {
+                const type = newMap[r][c];
+                if(type === 0) continue;
+
+                let el;
+                if(survivorIdx < survivors.length) {
+                    el = survivors[survivorIdx++];
+                    el.className = `gem gem-${type}`;
+                } else {
+                    el = createGemElement(type, r, c, boardId);
+                    el.style.top = ((r - 8) * 12.5) + "%";
+                    el.style.left = (c * 12.5) + "%";
+                    container.appendChild(el);
+                    void el.offsetWidth;
+                }
+
+                el.dataset.r = r;
+                el.dataset.c = c;
+                if(boardId === 'my-board') {
+                    el.onclick = function() {
+                        onGemClick(parseInt(this.dataset.r), parseInt(this.dataset.c));
+                    };
+                }
+
+                el.style.top = (r * 12.5) + "%";
+                el.style.left = (c * 12.5) + "%";
+                newGemDOMs[r][c] = el;
+            }
+        }
+
+        if(boardId === 'my-board') {
+            gemDOMs = newGemDOMs;
+        } else {
+            oppGemDOMs = newGemDOMs;
+        }
+    }
+
+    function highlight(r, c) {
+        if(gemDOMs[r] && gemDOMs[r][c]) {
+            gemDOMs[r][c].classList.add('selected');
+        }
+    }
+
+    function clearHighlight() {
+        if(selectedGem && gemDOMs[selectedGem.r] && gemDOMs[selectedGem.r][selectedGem.c]) {
+            gemDOMs[selectedGem.r][selectedGem.c].classList.remove('selected');
+        }
+        document.querySelectorAll('.gem.selected').forEach(e => e.classList.remove('selected'));
+    }
+
+    // 立即执行交换，不等待服务器
+    async function onGemClick(r, c) {
+        if(isProcessing) return;
+        if(activeItem === 'bomb') {
+            sendUseItemRequest('bomb', r, c);
+            return;
+        }
+
+        if(!selectedGem) {
+            selectedGem = {r, c};
+            highlight(r, c);
+            return;
+        }
+
+        const dr = r - selectedGem.r,
+              dc = c - selectedGem.c;
+        if(Math.abs(dr) + Math.abs(dc) === 1) {
+            const r1 = selectedGem.r,
+                  c1 = selectedGem.c;
+            const r2 = r,
+                  c2 = c;
+            const dir = (dr === -1 ? "UP" : dr === 1 ? "DOWN" : dc === -1 ? "LEFT" : "RIGHT");
+            selectedGem = null;
+            clearHighlight();
+
+            await swapGemDOMs(r1, c1, r2, c2);
+
+            const success = await executeMove(r1, c1, dir, r2, c2);
+
+            if(!success) {
+                await swapGemDOMs(r1, c1, r2, c2);
+                alert("无效移动");
+            }
+        } else {
+            selectedGem = {r, c};
+            clearHighlight();
+            highlight(r, c);
+        }
+    }
+
+    async function executeMove(r, c, dir, r2, c2) {
+        if(dir !== "INIT") isProcessing = true;
+        const res = await api("/game/move", {
+            game_uuid: UUID,
+            row: r,
+            col: c,
+            direction: dir
+        });
+
+        if(res && res.code === 200) {
+            const d = res.data;
+            if(!d.valid && dir !== "INIT") {
+                isProcessing = false;
+                return false;
+            }
+
+            if(d.attack_triggered) {
+                const board = document.getElementById('my-board');
+                const msg = document.getElementById('crit-msg');
+                board.classList.add('shake-effect');
+                msg.classList.add('active');
+                setTimeout(() => {
+                    board.classList.remove('shake-effect');
+                    msg.classList.remove('active');
+                }, 1000);
+            }
+
+            if(d.events) {
+                let combo = 0;
+                for(let ev of d.events) {
+                    if(ev.type === "eliminate") {
+                        combo++;
+                        SoundManager.playEliminate(combo);
+
+                        ev.coords.forEach(p => {
+                            const el = gemDOMs[p[0]][p[1]];
+                            if(el) el.classList.add('eliminating');
+                        });
+                        await wait(350);
+                    } else if (ev.type === "refill") {
+                        await animateRefill('my-board', gemDOMs, ev.map);
+                        await wait(400);
+                    } else if (ev.type === "virus_spread" || ev.type === "virus_spawn") {
+                        initBoardDOM('my-board', gemDOMs, d.sync_map);
+                    }
+                }
+            }
+
+            if(d.sync_map) {
+                if (dir === "INIT" || (!d.events || d.events.length === 0)) {
+                    initBoardDOM('my-board', gemDOMs, d.sync_map);
+                }
+            }
+
+            if(d.special_layers) {
+                renderDecorations('my-board', d.special_layers.ice_map, d.special_layers.bomb_list);
+            }
+
+            document.getElementById('my-score').innerText = d.game_status.current_score;
+
+            if(MODE === 'level' && d.game_status.is_over) {
+                await wait(200);
+                if(d.game_status.is_win) {
+                    let msg = `🎉 恭喜通关！获得 ${d.coins_earned || 0} 金币`;
+                    if(d.new_level_unlocked) {
+                        MAX_LEVEL++;
+                        ASSETS.coins += 100;
+                        msg += "\n🔓 新关卡解锁！奖励 100 金币";
+                    }
+                    if(d.coins_earned) {
+                        ASSETS.coins += d.coins_earned;
+                    }
+                    saveAssets();
+                    alert(msg);
+                } else {
+                    alert("💀 挑战失败");
+                }
+                backToLobby();
+            }
+            isProcessing = false;
+            return true;
+        }
+        isProcessing = false;
+        return false;
+    }
+
+    async function playOpponentEvents(events) {
+        if (!events || events.length === 0) return;
+        let combo = 0;
+        for(let ev of events) {
+            if(ev.type === "swap") {
+                SoundManager.playSwap();
+
+                const el1 = oppGemDOMs[ev.from[0]][ev.from[1]];
+                const el2 = oppGemDOMs[ev.to[0]][ev.to[1]];
+                if(el1) {
+                    el1.style.top = (ev.to[0] * 12.5) + "%";
+                    el1.style.left = (ev.to[1] * 12.5) + "%";
+                }
+                if(el2) {
+                    el2.style.top = (ev.from[0] * 12.5) + "%";
+                    el2.style.left = (ev.from[1] * 12.5) + "%";
+                }
+                oppGemDOMs[ev.from[0]][ev.from[1]] = el2;
+                oppGemDOMs[ev.to[0]][ev.to[1]] = el1;
+                await wait(300);
+            } else if(ev.type === "eliminate") {
+                combo++;
+                SoundManager.playEliminate(combo);
+
+                ev.coords.forEach(p => {
+                    const el = oppGemDOMs[p[0]][p[1]];
+                    if(el) el.classList.add('eliminating');
+                });
+                await wait(350);
+            } else if (ev.type === "refill") {
+                await animateRefill('opp-board', oppGemDOMs, ev.map);
+                await wait(400);
+            }
+        }
+    }
+
+    function renderDecorations(id, iceMap, bombList) {
+        document.querySelectorAll(`#${id} .ice-layer, #${id} .bomb-layer`).forEach(e => e.remove());
+        const targetArr = (id === 'my-board') ? gemDOMs : oppGemDOMs;
+        if(iceMap) {
+            for(let r = 0; r < 8; r++) {
+                for(let c = 0; c < 8; c++) {
+                    if(iceMap[r][c] && targetArr[r][c]) {
+                        const i = document.createElement('div');
+                        i.className = 'ice-layer';
+                        targetArr[r][c].appendChild(i);
+                    }
+                }
+            }
+        }
+        if(bombList) {
+            bombList.forEach(b => {
+                if(targetArr[b.r][b.c]) {
+                    const div = document.createElement('div');
+                    div.className = 'bomb-layer';
+                    div.innerText = b.timer;
+                    targetArr[b.r][b.c].appendChild(div);
+                }
+            });
+        }
+    }
+
+    function renderOverlay(id, isFrozen, ms) {
+        const p = document.getElementById(id).parentNode;
+        let ex = p.querySelector('.freeze-overlay');
+        if(isFrozen) {
+            if(!ex) {
+                const d = document.createElement('div');
+                d.className = 'freeze-overlay';
+                d.innerHTML = `
+                    <div>❄️</div>
+                    <div id='${id}-t' style='font-size:16px'></div>
+                `;
+                p.appendChild(d);
+                ex = d;
+            }
+            const t = document.getElementById(`${id}-t`);
+            if(t) {
+                t.innerText = (ms / 1000).toFixed(1) + "s";
+            }
+        } else if(ex) {
+            ex.remove();
+        }
+    }
+
+    function openLevelMap() {
+        showView('level-map');
+    }
+
+    function openAiModal() {
+        document.getElementById('modal-ai').classList.add('visible');
+    }
+
+    function closeAiModal() {
+        document.getElementById('modal-ai').classList.remove('visible');
+    }
+
+    async function startLevel(levelNum) {
+        if(levelNum > MAX_LEVEL) return alert("Locked!");
+        CURRENT_LEVEL = levelNum;
+        const r = await api("/game/start", {mode: "level", level: levelNum, uid: UID});
+        if(r) {
+            initGame("level", r.data, false);
+        }
+    }
+
+    async function startAiGame(diff) {
+        closeAiModal();
+        const r = await api("/pve/start", {difficulty: diff, uid: UID});
+        if(r){
+            UUID = r.data.game_uuid;
+            initGame("pve", null, true, (diff === 1 ? "🌱 简单" : diff === 2 ? "⚔️ 普通" : "🔥 困难"));
+            POLL_TIMER = setInterval(updateDualStatus, 500);
+        }
+    }
+
+    async function startEndless() {
+        const r = await api("/game/start", {mode: "endless", level: 1, uid: UID});
+        if(r) {
+            initGame("endless", r.data, false);
+        }
+    }
+
+    async function startPVP() {
+        const btn = document.getElementById('btn-pvp');
+
+        if (btn.innerText === "取消匹配") {
+            btn.disabled = true;
+            const r = await api("/pvp/cancel", { uid: UID });
+            btn.disabled = false;
+            if (r && r.code === 200) {
+                btn.innerText = "匹配"; // 恢复原状
+                if(POLL_TIMER) {
+                    clearInterval(POLL_TIMER);
+                    POLL_TIMER = null;
+                }
+            } else {
+                alert("取消失败或已匹配成功");
+            }
+            return;
+        }
+
+        btn.innerText = "取消匹配";
+
+        const r = await api("/pvp/match", {uid: UID});
+        if(!r) {
+            btn.innerText = "匹配";
+            return;
+        }
+
+        UUID = r.data.game_uuid;
+
+        POLL_TIMER = setInterval(async () => {
+            const s = await api("/pvp/status", {game_uuid: UUID});
+
+            if (!s || s.code !== 200 || s.data.status === 'error') {
+                clearInterval(POLL_TIMER);
+                btn.innerText = "匹配";
+                return;
+            }
+
+            if(s.data.status === "playing") {
+                clearInterval(POLL_TIMER);
+                initGame("pvp", null, true);
+                POLL_TIMER = setInterval(updateDualStatus, 500);
+            }
+        }, 1000);
+    }
+
+    async function initGame(mode, initData, isDual, extraLabel = "") {
+        SoundManager.init();
+        SoundManager.playBGM();
+        MODE = mode;
+        UUID = initData ? initData.game_uuid : UUID;
+        showView('game');
+        document.getElementById('opp-container').classList.toggle('hidden', !isDual);
+        document.getElementById('btn-pvp').innerText = "匹配";
+        document.getElementById('btn-pvp').disabled = false;
+
+        let title = "VS";
+        if(mode === 'level') {
+            title = initData.level_info.desc;
+        } else if(mode === 'endless') {
+            title = "♾️ 无尽挑战";
+        } else if(mode === 'pve') {
+            title = "🤖 " + extraLabel;
+        }
+        document.getElementById('game-info').innerText = title;
+        document.getElementById('game-coins').innerText = ASSETS.coins;
+        document.getElementById('my-score').innerText = "0";
+
+        if (mode === 'level') {
+            document.getElementById('center-val').innerText = "🎯 " + initData.level_info.target;
+        } else if (mode === 'endless') {
+            document.getElementById('center-val').innerText = "♾️";
+        } else {
+            document.getElementById('center-val').innerText = "⏳ 60s";
+        }
+        updateUIAssets();
+
+        const shop = document.getElementById('shop-container');
+        if (mode === 'pvp') {
+            shop.classList.remove('disabled');
+        } else {
+            shop.classList.add('disabled');
+        }
+
+        if(initData) {
+            initBoardDOM('my-board', gemDOMs, initData.map);
+            let bombs = [];
+            if(initData.bomb_map) {
+                if(Array.isArray(initData.bomb_map)) {
+                    bombs = initData.bomb_map;
+                } else {
+                    for(let k in initData.bomb_map) {
+                        bombs.push({
+                            r: Math.floor(k / 8),
+                            c: k % 8,
+                            timer: initData.bomb_map[k]
+                        });
+                    }
+                }
+            }
+            renderDecorations('my-board', initData.ice_map, bombs);
+        } else {
+            await executeMove(-1, -1, "INIT");
+        }
+
+        if(isDual) {
+            document.getElementById('opp-board').innerHTML = "";
+            oppGemDOMs = Array(8).fill(null).map(() => Array(8).fill(null));
+        }
+    }
+
+    async function updateDualStatus() {
+        const res = await api("/pvp/status", { game_uuid: UUID });
+
+        if(res && res.data && res.data.status === "opponent_left") {
+            clearInterval(POLL_TIMER);
+            alert("对方已离开游戏，您获得了胜利！");
+            backToLobby();
+            return;
+        }
+
+        if(!res) return;
+        const d = res.data;
+
+        document.getElementById('my-score').innerText = d.my_score;
+        document.getElementById('opp-score').innerText = d.opp_score;
+
+        if(d.opp_nickname) {
+            const oppLabel = document.querySelector('#opp-container div:first-child');
+            if(oppLabel) {
+                oppLabel.innerHTML = `
+                    <span style="color:#000">${d.opp_nickname}:</span>
+                    <span id="opp-score">${d.opp_score}</span>
+                `;
+            }
+        }
+
+        if (d.time_left_sec !== undefined) {
+            document.getElementById('center-val').innerText = "⏳ " + d.time_left_sec + "s";
+        }
+
+        renderOverlay('my-board', d.is_frozen, d.freeze_time_ms);
+        if(d.is_over) {
+            clearInterval(POLL_TIMER);
+            alert(d.is_win ? "胜利!" : "失败");
+            backToLobby();
+            return;
+        }
+
+        if (d.opp_events && d.opp_events.length > 0) {
+            await playOpponentEvents(d.opp_events);
+        }
+
+        if (d.opp_map && document.getElementById('opp-board').innerHTML === "") {
+            initBoardDOM('opp-board', oppGemDOMs, d.opp_map);
+        }
+        renderOverlay('opp-board', d.opp_is_frozen, 0);
+    }
+
+    async function buyItemShop(t) {
+        if(ASSETS.coins < 30) return alert("金币不足");
+        const r = await api("/shop/buy", {uid: UID, item_type: t});
+        if(r && r.code === 200) {
+            ASSETS.coins -= 30;
+            ASSETS.items[t]++;
+            saveAssets();
+            alert("购买成功");
+        }
+    }
+
+    function useItemGame(t) {
+        if(MODE !== 'pvp') return;
+        if(ASSETS.items[t] <= 0) return alert("道具不足");
+        if(t === 'bomb') {
+            activeItem = 'bomb';
+            alert("请点击消除位置");
+            return;
+        }
+        sendUseItemRequest(t);
+    }
+
+    async function sendUseItemRequest(t, r = -1, c = -1) {
+        const res = await api("/game/use_item", {
+            game_uuid: UUID,
+            item_type: t,
+            row: r,
+            col: c
+        });
+
+        if (res && res.code === 200) {
+            ASSETS.items[t]--;
+            saveAssets();
+            activeItem = null;
+
+            if (res.data.events && res.data.events.length > 0) {
+                for (let ev of res.data.events) {
+                    if (ev.type === "eliminate") {
+                        if(t === 'bomb') {
+                            SoundManager.playExplosion();
+                            const board = document.getElementById('my-board');
+                            board.classList.remove('shake-effect');
+                            void board.offsetWidth;
+                            board.classList.add('shake-effect');
+                        } else {
+                            SoundManager.playEliminate(1);
+                        }
+
+                        ev.coords.forEach(p => {
+                            const el = gemDOMs[p[0]][p[1]];
+                            if (el) el.classList.add('eliminating');
+                        });
+                        await wait(350);
+                    } else if (ev.type === "refill") {
+                        await animateRefill('my-board', gemDOMs, ev.map);
+                        await wait(400);
+                    }
+                }
+            }
+
+            if (res.data.new_map) {
+                initBoardDOM('my-board', gemDOMs, res.data.new_map);
+            }
+
+            if (res.data.events && res.data.events.length > 0) {
+                const lastRefill = res.data.events.slice().reverse().find(e => e.type === 'refill');
+                if (lastRefill) {
+                    renderDecorations('my-board', lastRefill.ice_map, res.data.new_bombs);
+                }
+            }
+
+        } else {
+            alert(res ? res.msg : "使用失败");
+        }
+    }
+
+    function logout() {
+        localStorage.removeItem("token");
+        localStorage.removeItem("uid");
+        localStorage.removeItem("nick");
+
+        localStorage.removeItem("coins");
+        localStorage.removeItem("items");
+        localStorage.removeItem("max_level");
+
+        TOKEN = "";
+        UID = 0;
+        ASSETS = {
+            coins: 0,
+            items: {
+                bomb: 0,
+                reset: 0,
+                freeze: 0
+            }
+        };
+
+        isRegister = false;
+        document.getElementById('btn-toggle-auth').innerText = "注册新账号";
+        document.getElementById('auth-nickname').classList.add('hidden');
+        document.getElementById('btn-auth-action').innerText = "🚀 进入游戏";
+        document.getElementById('auth-account').value = ""; // 清空输入框
+        document.getElementById('auth-password').value = "";
+
+        showView('auth');
+    }
+
+    function updateUIAssets() {
+        document.getElementById('user-nickname').innerText = localStorage.getItem("nick") || "Player";
+        document.getElementById('user-coins').innerText = ASSETS.coins;
+        ['bomb', 'reset', 'freeze'].forEach(k => {
+            const el = document.getElementById('count-' + k);
+            if(el) {
+                el.innerText = ASSETS.items[k];
+            }
+        });
+    }
+
+    async function api(path, body) {
+        try {
+            const r = await fetch(API + path, {
+                method: body ? "POST" : "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + TOKEN
+                },
+                body: body ? JSON.stringify(body) : null
+            });
+            return await r.json();
+        } catch(e) {
+            return null;
+        }
+    }
+
+    function toggleSound() {
+        SoundManager.init();
+        const isMuted = SoundManager.toggleMute();
+        const btn = document.getElementById('btn-sound');
+        if (isMuted) {
+            btn.innerText = "🔇 静音";
+            btn.style.opacity = "0.6";
+        } else {
+            btn.innerText = "🔊 开启";
+            btn.style.opacity = "1";
+            SoundManager.playBGM();
+        }
+    }
+</script>
+</body>
+</html>
